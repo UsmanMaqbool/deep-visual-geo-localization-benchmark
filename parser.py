@@ -45,7 +45,7 @@ def parse_arguments():
     parser.add_argument('--pca_dim', type=int, default=None, help="PCA dimension (number of principal components). If None, PCA is not used.")
     parser.add_argument('--fc_output_dim', type=int, default=None,
                         help="Output dimension of fully connected layer. If None, don't use a fully connected layer.")
-    parser.add_argument('--pretrain', type=str, default="imagenet", choices=['imagenet', 'gldv2', 'places'],
+    parser.add_argument('--pretrain', type=str, default="imagenet", choices=['imagenet', 'gldv2', 'places', 'offtheshelf'],
                         help="Select the pretrained weights for the starting network")
     parser.add_argument("--off_the_shelf", type=str, default="imagenet", choices=["imagenet", "radenovic_sfm", "radenovic_gldv1", "naver"],
                         help="Off-the-shelf networks from popular GitHub repos. Only with ResNet-50/101 + GeM + FC 2048")

@@ -136,6 +136,11 @@ def get_backbone(args):
         for l in layers[:-5]:
             for p in l.parameters(): p.requires_grad = False
         logging.debug("Train last layers of the vgg16, freeze the previous ones")
+        if args.pretrain == 'offtheshelf' :
+            model_name = "vd16_offtheshelf_conv5_3_max"
+            file_path = join("data", "pretrained_nets", model_name +".pth")
+            backbone.load_state_dict(torch.load(file_path),strict=False)
+            print("Matconvnet Loaded")
     elif args.backbone == "alexnet":
         backbone = torchvision.models.alexnet(pretrained=True)
         layers = list(backbone.features.children())[:-2]
