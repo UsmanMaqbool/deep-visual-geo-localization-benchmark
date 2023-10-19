@@ -1,4 +1,3 @@
-
 import math
 import torch
 import logging
@@ -10,6 +9,7 @@ from os.path import join
 from datetime import datetime
 import torchvision.transforms as transforms
 from torch.utils.data.dataloader import DataLoader
+import torch.nn.functional as F
 
 import util
 import test
@@ -19,6 +19,106 @@ import datasets_ws
 from model import network
 from model.sync_batchnorm import convert_model
 from model.functional import sare_ind, sare_joint
+
+def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
+    
+    # if B*N!=vlad_encoding.shape[0]:
+        # vlad_encoding = vlad_encoding[:B*N,:]
+    # print("vlad_encoding: " , vlad_encoding.shape)
+
+    # outputs = vlad_encoding.view(B, N, -1)
+    # print("outputs: " , outputs.shape)
+
+    #N: 12
+    # B: 1
+    # nNeg: 10
+    
+    # outputs = outputs.view(B, N, -1)
+    L = vlad_encoding.size(-1)
+    temp = 0.07
+    output_anchors, output_positives, output_negatives = torch.split(vlad_encoding, [B, B, nNeg])
+    
+    output_negatives = output_negatives.unsqueeze(0)
+    # output_negatives = outputs[:, 2:]
+    # output_anchors = outputs[:, 0]
+    # output_positives = outputs[:, 1]
+    # print("outputs: " , output_positives.shape)
+    # print("outputs: " , output_negatives.shape)
+    
+    if (loss_type=='triplet'):
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_positives = output_positives.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        loss = F.triplet_margin_loss(output_anchors, output_positives, output_negatives,
+                                        margin=self.margin**0.5, p=2, reduction='mean')
+
+    elif (loss_type=='sare_joint'):
+        ### original version: euclidean distance
+        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
+        # dist_pos = dist_pos.view(B, 1)
+
+        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        # output_negatives = output_negatives.contiguous().view(-1, L)
+        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
+        # dist_neg = dist_neg.view(B, -1)
+
+        # dist = - torch.cat((dist_pos, dist_neg), 1)
+        # dist = F.log_softmax(dist, 1)
+        # loss = (- dist[:, 0]).mean()
+
+        ### new version: dot product
+        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        dist_pos = dist_pos.diagonal(0)
+        dist_pos = dist_pos.view(B, 1)
+        
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        dist_neg = dist_neg.diagonal(0)
+        dist_neg = dist_neg.view(B, -1)
+        
+        dist = torch.cat((dist_pos, dist_neg), 1)/temp
+        dist = F.log_softmax(dist, 1)
+        loss = (- dist[:, 0]).mean()
+
+    elif (loss_type=='sare_ind'):
+        ### original version: euclidean distance
+        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
+        # dist_pos = dist_pos.view(B, 1)
+
+        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        # output_negatives = output_negatives.contiguous().view(-1, L)
+        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
+        # dist_neg = dist_neg.view(B, -1)
+
+        # dist_neg = dist_neg.unsqueeze(2)
+        # dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
+        # dist = - torch.cat((dist_pos, dist_neg), 2).view(-1, 2)
+        # dist = F.log_softmax(dist, 1)
+        # loss = (- dist[:, 0]).mean()
+
+        ### new version: dot product
+        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        dist_pos = dist_pos.diagonal(0)
+        dist_pos = dist_pos.view(B, 1)
+        
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        dist_neg = dist_neg.diagonal(0)
+        dist_neg = dist_neg.view(B, -1)
+        
+        dist_neg = dist_neg.unsqueeze(2)
+        dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
+        dist = torch.cat((dist_pos, dist_neg), 2).view(-1, 2)/temp
+        dist = F.log_softmax(dist, 1)
+        loss = (- dist[:, 0]).mean()
+
+    else:
+        assert ("Unknown loss function")
+
+    return loss   
+
 
 torch.backends.cudnn.benchmark = True  # Provides a speedup
 #### Initial setup: parser, logging...
@@ -137,41 +237,82 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
             
             # Compute features of all images (images contains queries, positives and negatives)
             features = model(images.to(args.device))
-            loss_triplet = 0
+            loss = 0
+
+            # loss = get_loss(opt, vlad_encoding, opt.loss, B, N, nNeg).to(device)
+            B = args.train_batch_size
+            nNeg = args.negs_num_per_query
+            N = int(B*(1 + 1 + args.negs_num_per_query))
             
-            if args.criterion == "triplet":
-                triplets_local_indexes = torch.transpose(
-                    triplets_local_indexes.view(args.train_batch_size, args.negs_num_per_query, 3), 1, 0)
-                for triplets in triplets_local_indexes:
-                    queries_indexes, positives_indexes, negatives_indexes = triplets.T
-                    loss_triplet += criterion_triplet(features[queries_indexes],
-                                                      features[positives_indexes],
-                                                      features[negatives_indexes])
-            elif args.criterion == 'sare_joint':
-                # sare_joint needs to receive all the negatives at once
-                triplet_index_batch = triplets_local_indexes.view(args.train_batch_size, 10, 3)
-                for batch_triplet_index in triplet_index_batch:
-                    q = features[batch_triplet_index[0, 0]].unsqueeze(0)  # obtain query as tensor of shape 1xn_features
-                    p = features[batch_triplet_index[0, 1]].unsqueeze(0)  # obtain positive as tensor of shape 1xn_features
-                    n = features[batch_triplet_index[:, 2]]               # obtain negatives as tensor of shape 10xn_features
-                    loss_triplet += criterion_triplet(q, p, n)
-            elif args.criterion == "sare_ind":
-                for triplet in triplets_local_indexes:
-                    # triplet is a 1-D tensor with the 3 scalars indexes of the triplet
-                    q_i, p_i, n_i = triplet
-                    loss_triplet += criterion_triplet(features[q_i:q_i+1], features[p_i:p_i+1], features[n_i:n_i+1])
+            # N: 12
+            # B: 1
+            # nNeg: 10
+            # some reshaping to put query, pos, negs in a single (N, 3, H, W) tensor
+            # where N = batchSize * (nQuery + nPos + nNeg)
+
+            outputs = features.view(args.train_batch_size,1 + 1 + args.negs_num_per_query, -1)    
+            for output in outputs:
+                loss += get_loss(args, output, args.criterion, 1, N, nNeg).to(args.device)
+                
+            
+            
+            
+            
+            # triplet_index_batch = triplets_local_indexes.view(args.train_batch_size, 10, 3)
+            # for batch_triplet_index in triplet_index_batch:
+            #     # q = features[batch_triplet_index[0, 0]].unsqueeze(0)  # obtain query as tensor of shape 1xn_features
+            #     # p = features[batch_triplet_index[0, 1]].unsqueeze(0)  # obtain positive as tensor of shape 1xn_features
+            #     # n = features[batch_triplet_index[:, 2]]               # obtain negatives as tensor of shape 10xn_features
+            #     print(batch_triplet_index[0, 0])
+            #     print(batch_triplet_index[0, 1])
+            #     print(batch_triplet_index[:, 2])
+                    
+            # # 
+
+            # if args.criterion == "triplet":
+            #     triplets_local_indexes = torch.transpose(
+            #         triplets_local_indexes.view(args.train_batch_size, args.negs_num_per_query, 3), 1, 0)
+            #     for triplets in triplets_local_indexes:
+            #         queries_indexes, positives_indexes, negatives_indexes = triplets.T
+            #         loss += criterion_triplet(features[queries_indexes],
+            #                                           features[positives_indexes],
+            #                                           features[negatives_indexes:negatives_indexes+10])
+            # elif args.criterion == 'sare_joint':
+            #     # sare_joint needs to receive all the negatives at once
+            #     triplet_index_batch = triplets_local_indexes.view(args.train_batch_size, 10, 3)
+            #     for batch_triplet_index in triplet_index_batch:
+            #         q = features[batch_triplet_index[0, 0]].unsqueeze(0)  # obtain query as tensor of shape 1xn_features
+            #         p = features[batch_triplet_index[0, 1]].unsqueeze(0)  # obtain positive as tensor of shape 1xn_features
+            #         n = features[batch_triplet_index[:, 2]]               # obtain negatives as tensor of shape 10xn_features
+                    
+                    
+            #         # q.shape
+            #         # torch.Size([1, 32768])
+            #         # p.shape
+            #         # torch.Size([1, 32768])
+            #         # n.shape
+            #         # torch.Size([10, 32768])
+                    
+                    
+                    
+            #         loss += criterion_triplet(q, p, n)
+            # elif args.criterion == "sare_ind":
+            #     for triplet in triplets_local_indexes:
+            #         # triplet is a 1-D tensor with the 3 scalars indexes of the triplet
+            #         q_i, p_i, n_i = triplet
+            #         loss += criterion_triplet(features[q_i:q_i+1], features[p_i:p_i+1], features[n_i:n_i+1])
             
             del features
-            loss_triplet /= (args.train_batch_size * args.negs_num_per_query)
+            loss /= (args.train_batch_size * args.negs_num_per_query)
             
             optimizer.zero_grad()
-            loss_triplet.backward()
+            loss.backward()
             optimizer.step()
             
             # Keep track of all losses by appending them to epoch_losses
-            batch_loss = loss_triplet.item()
+            batch_loss = loss.item()
             epoch_losses = np.append(epoch_losses, batch_loss)
-            del loss_triplet
+            del loss
         
         logging.debug(f"Epoch[{epoch_num:02d}]({loop_num}/{loops_num}): " +
                       f"current batch triplet loss = {batch_loss:.4f}, " +
