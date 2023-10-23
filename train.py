@@ -56,32 +56,32 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
 
     elif (loss_type=='sare_joint'):
         # ### original version: euclidean distance
-        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
-        # dist_pos = dist_pos.view(B, 1)
-
-        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        # output_negatives = output_negatives.contiguous().view(-1, L)
-        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
-        # dist_neg = dist_neg.view(B, -1)
-
-        # dist = - torch.cat((dist_pos, dist_neg), 1)
-        # dist = F.log_softmax(dist, 1)
-        # loss = (- dist[:, 0]).mean()
-
-        ## new version: dot product
-        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
-        dist_pos = dist_pos.diagonal(0)
+        dist_pos = ((output_anchors - output_positives)**2).sum(1)
         dist_pos = dist_pos.view(B, 1)
-        
+
         output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
         output_negatives = output_negatives.contiguous().view(-1, L)
-        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
-        dist_neg = dist_neg.diagonal(0)
+        dist_neg = ((output_anchors - output_negatives)**2).sum(1)
         dist_neg = dist_neg.view(B, -1)
-        
-        dist = torch.cat((dist_pos, dist_neg), 1)/temp
+
+        dist = - torch.cat((dist_pos, dist_neg), 1)
         dist = F.log_softmax(dist, 1)
         loss = (- dist[:, 0]).mean()
+
+        ## new version: dot product
+        # dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        # dist_pos = dist_pos.diagonal(0)
+        # dist_pos = dist_pos.view(B, 1)
+        
+        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        # output_negatives = output_negatives.contiguous().view(-1, L)
+        # dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        # dist_neg = dist_neg.diagonal(0)
+        # dist_neg = dist_neg.view(B, -1)
+        
+        # dist = torch.cat((dist_pos, dist_neg), 1)/temp
+        # dist = F.log_softmax(dist, 1)
+        # loss = (- dist[:, 0]).mean()
 
     elif (loss_type=='sare_ind'):
         # ### original version: euclidean distance
@@ -174,12 +174,6 @@ else:
     elif args.optim == "sgd":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.001)
 
-if args.criterion == "triplet":
-    criterion_triplet = nn.TripletMarginLoss(margin=args.margin, p=2, reduction="sum")
-elif args.criterion == "sare_ind":
-    criterion_triplet = sare_ind
-elif args.criterion == "sare_joint":
-    criterion_triplet = sare_joint
 
 #### Resume model, optimizer, and other training parameters
 if args.resume:
@@ -248,55 +242,15 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
             N = int(1 + 1 + args.negs_num_per_query)
             
             # N: 12
-            # B: 1
+            # B: 4
             # nNeg: 10
             # some reshaping to put query, pos, negs in a single (N, 3, H, W) tensor
             # where N = batchSize * (nQuery + nPos + nNeg)
 
             loss = get_loss(args, features, args.criterion, B, N, nNeg).to(args.device)
-            # outputs = features.view(args.train_batch_size,N, -1)    
-            # for output in outputs:
-            #     loss += get_loss(args, output, args.criterion, B, N, nNeg).to(args.device)
- 
 
-            
-            
-
-            # if args.criterion == "triplet":
-            #     triplets_local_indexes = torch.transpose(
-            #         triplets_local_indexes.view(args.train_batch_size, args.negs_num_per_query, 3), 1, 0)
-            #     for triplets in triplets_local_indexes:
-            #         queries_indexes, positives_indexes, negatives_indexes = triplets.T
-            #         loss += criterion_triplet(features[queries_indexes],
-            #                                           features[positives_indexes],
-            #                                           features[negatives_indexes:negatives_indexes+10])
-            # elif args.criterion == 'sare_joint':
-            #     # sare_joint needs to receive all the negatives at once
-            #     triplet_index_batch = triplets_local_indexes.view(args.train_batch_size, 10, 3)
-            #     for batch_triplet_index in triplet_index_batch:
-            #         q = features[batch_triplet_index[0, 0]].unsqueeze(0)  # obtain query as tensor of shape 1xn_features
-            #         p = features[batch_triplet_index[0, 1]].unsqueeze(0)  # obtain positive as tensor of shape 1xn_features
-            #         n = features[batch_triplet_index[:, 2]]               # obtain negatives as tensor of shape 10xn_features
-                    
-                    
-            #         # q.shape
-            #         # torch.Size([1, 32768])
-            #         # p.shape
-            #         # torch.Size([1, 32768])
-            #         # n.shape
-            #         # torch.Size([10, 32768])
-                    
-                    
-                    
-            #         loss += criterion_triplet(q, p, n)
-            # elif args.criterion == "sare_ind":
-            #     for triplet in triplets_local_indexes:
-            #         # triplet is a 1-D tensor with the 3 scalars indexes of the triplet
-            #         q_i, p_i, n_i = triplet
-            #         loss += criterion_triplet(features[q_i:q_i+1], features[p_i:p_i+1], features[n_i:n_i+1])
             
             del features
-            # loss /= (args.train_batch_size * args.negs_num_per_query)
             
             optimizer.zero_grad()
             loss.backward()
@@ -319,21 +273,23 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
     logging.info(f"Recalls on val set {val_ds}: {recalls_str}")
     
     #### Save all checkpoints
+    is_best = 0
+    # Save checkpoint, which contains all training parameters
+    # util.save_checkpoint(args, {
+    #     "epoch_num": epoch_num, "model_state_dict": model.state_dict(),
+    #     "optimizer_state_dict": optimizer.state_dict(), "recalls": recalls, "best_r5": best_r5,
+    #     "not_improved_num": not_improved_num
+    # },is_best, filename=join(args.criterion+"-"+str(epoch_num)+".pth"))
     
     is_best = recalls[1] > best_r5
     
-    # Save checkpoint, which contains all training parameters
-    util.save_checkpoint(args, {
-        "epoch_num": epoch_num, "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(), "recalls": recalls, "best_r5": best_r5,
-        "not_improved_num": not_improved_num
-    }, filename=join(args.criterion+"-"+str(loop_num)+".pth"))
+
     
     util.save_checkpoint(args, {
         "epoch_num": epoch_num, "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(), "recalls": recalls, "best_r5": best_r5,
         "not_improved_num": not_improved_num
-    }, is_best, filename=join("last_model.pth"))
+    }, is_best, filename=join(args.criterion+"-"+str(epoch_num)+".pth"))
     
     # If recall@5 did not improve for "many" epochs, stop training
     if is_best:
