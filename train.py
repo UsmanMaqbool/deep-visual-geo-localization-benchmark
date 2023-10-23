@@ -32,28 +32,30 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
     #N: 12
     # B: 1
     # nNeg: 10
-    
-    # outputs = outputs.view(B, N, -1)
-    L = vlad_encoding.size(-1)
+
     temp = 0.07
-    output_anchors, output_positives, output_negatives = torch.split(vlad_encoding, [B, B, nNeg])
     
-    output_negatives = output_negatives.unsqueeze(0)
-    # output_negatives = outputs[:, 2:]
-    # output_anchors = outputs[:, 0]
-    # output_positives = outputs[:, 1]
-    # print("outputs: " , output_positives.shape)
-    # print("outputs: " , output_negatives.shape)
+
+    # outputs = outputs.view(B, N, -1)
+
+    outputs = vlad_encoding.view(B, N, -1)
+    L = vlad_encoding.size(-1)
+
+    output_negatives = outputs[:, 2:]
+    output_anchors = outputs[:, 0]
+    output_positives = outputs[:, 1]
+
+    # output_anchors, output_positives, output_negatives = torch.split(vlad_encoding, [B, B, nNeg])
     
     if (loss_type=='triplet'):
         output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
         output_positives = output_positives.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
         output_negatives = output_negatives.contiguous().view(-1, L)
         loss = F.triplet_margin_loss(output_anchors, output_positives, output_negatives,
-                                        margin=self.margin**0.5, p=2, reduction='mean')
+                                        margin=self.margin, p=2, reduction='mean')
 
     elif (loss_type=='sare_joint'):
-        ### original version: euclidean distance
+        # ### original version: euclidean distance
         # dist_pos = ((output_anchors - output_positives)**2).sum(1)
         # dist_pos = dist_pos.view(B, 1)
 
@@ -66,7 +68,7 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
         # dist = F.log_softmax(dist, 1)
         # loss = (- dist[:, 0]).mean()
 
-        ### new version: dot product
+        ## new version: dot product
         dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
         dist_pos = dist_pos.diagonal(0)
         dist_pos = dist_pos.view(B, 1)
@@ -82,7 +84,7 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
         loss = (- dist[:, 0]).mean()
 
     elif (loss_type=='sare_ind'):
-        ### original version: euclidean distance
+        # ### original version: euclidean distance
         # dist_pos = ((output_anchors - output_positives)**2).sum(1)
         # dist_pos = dist_pos.view(B, 1)
 
@@ -97,7 +99,7 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
         # dist = F.log_softmax(dist, 1)
         # loss = (- dist[:, 0]).mean()
 
-        ### new version: dot product
+        ## new version: dot product
         dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
         dist_pos = dist_pos.diagonal(0)
         dist_pos = dist_pos.view(B, 1)
@@ -242,7 +244,8 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
             # loss = get_loss(opt, vlad_encoding, opt.loss, B, N, nNeg).to(device)
             B = args.train_batch_size
             nNeg = args.negs_num_per_query
-            N = int(B*(1 + 1 + args.negs_num_per_query))
+            
+            N = int(1 + 1 + args.negs_num_per_query)
             
             # N: 12
             # B: 1
@@ -250,24 +253,14 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
             # some reshaping to put query, pos, negs in a single (N, 3, H, W) tensor
             # where N = batchSize * (nQuery + nPos + nNeg)
 
-            outputs = features.view(args.train_batch_size,1 + 1 + args.negs_num_per_query, -1)    
-            for output in outputs:
-                loss += get_loss(args, output, args.criterion, 1, N, nNeg).to(args.device)
-                
+            loss = get_loss(args, features, args.criterion, B, N, nNeg).to(args.device)
+            # outputs = features.view(args.train_batch_size,N, -1)    
+            # for output in outputs:
+            #     loss += get_loss(args, output, args.criterion, B, N, nNeg).to(args.device)
+ 
+
             
             
-            
-            
-            # triplet_index_batch = triplets_local_indexes.view(args.train_batch_size, 10, 3)
-            # for batch_triplet_index in triplet_index_batch:
-            #     # q = features[batch_triplet_index[0, 0]].unsqueeze(0)  # obtain query as tensor of shape 1xn_features
-            #     # p = features[batch_triplet_index[0, 1]].unsqueeze(0)  # obtain positive as tensor of shape 1xn_features
-            #     # n = features[batch_triplet_index[:, 2]]               # obtain negatives as tensor of shape 10xn_features
-            #     print(batch_triplet_index[0, 0])
-            #     print(batch_triplet_index[0, 1])
-            #     print(batch_triplet_index[:, 2])
-                    
-            # # 
 
             # if args.criterion == "triplet":
             #     triplets_local_indexes = torch.transpose(
@@ -303,7 +296,7 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
             #         loss += criterion_triplet(features[q_i:q_i+1], features[p_i:p_i+1], features[n_i:n_i+1])
             
             del features
-            loss /= (args.train_batch_size * args.negs_num_per_query)
+            # loss /= (args.train_batch_size * args.negs_num_per_query)
             
             optimizer.zero_grad()
             loss.backward()
@@ -325,6 +318,8 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
     recalls, recalls_str = test.test(args, val_ds, model)
     logging.info(f"Recalls on val set {val_ds}: {recalls_str}")
     
+    #### Save all checkpoints
+    
     is_best = recalls[1] > best_r5
     
     # Save checkpoint, which contains all training parameters
@@ -332,7 +327,13 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
         "epoch_num": epoch_num, "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(), "recalls": recalls, "best_r5": best_r5,
         "not_improved_num": not_improved_num
-    }, is_best, filename="last_model.pth")
+    }, filename=join(args.criterion+"-"+str(loop_num)+".pth"))
+    
+    util.save_checkpoint(args, {
+        "epoch_num": epoch_num, "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(), "recalls": recalls, "best_r5": best_r5,
+        "not_improved_num": not_improved_num
+    }, is_best, filename=join("last_model.pth"))
     
     # If recall@5 did not improve for "many" epochs, stop training
     if is_best:
@@ -349,6 +350,9 @@ for epoch_num in range(start_epoch_num, args.epochs_num):
 
 logging.info(f"Best R@5: {best_r5:.1f}")
 logging.info(f"Trained for {epoch_num+1:02d} epochs, in total in {str(datetime.now() - start_time)[:-7]}")
+
+
+
 
 #### Test best model on test set
 best_model_state_dict = torch.load(join(args.save_dir, "best_model.pth"))["model_state_dict"]

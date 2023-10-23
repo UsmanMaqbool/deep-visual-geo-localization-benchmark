@@ -10,7 +10,7 @@ def parse_arguments():
     # Training parameters
     parser.add_argument("--train_batch_size", type=int, default=4,
                         help="Number of triplets (query, pos, negs) in a batch. Each triplet consists of 12 images")
-    parser.add_argument("--infer_batch_size", type=int, default=16,
+    parser.add_argument("--infer_batch_size", type=int, default=32,
                         help="Batch size for inference (caching and testing)")
     parser.add_argument("--criterion", type=str, default='triplet', help='loss to be used',
                         choices=["triplet", "sare_ind", "sare_joint"])
@@ -52,7 +52,7 @@ def parse_arguments():
     parser.add_argument("--trunc_te", type=int, default=None, choices=list(range(0, 14)))
     parser.add_argument("--freeze_te", type=int, default=None, choices=list(range(-1, 14)))
     # Initialization parameters
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to load checkpoint from, for resuming training or testing.")
     # Other parameters
