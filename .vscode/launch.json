@@ -16,6 +16,7 @@
                 "--backbone=vgg16",
                 "--criterion=sare_joint",
                 "--pretrain=offtheshelf",
+                "--save_dir=",
             ],
             "env": {
                 "DATASETS_FOLDER": "datasets_vg/datasets/" 

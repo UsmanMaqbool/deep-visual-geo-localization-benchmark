@@ -102,7 +102,14 @@ else:
 test_ds = datasets_ws.BaseDataset(args, args.datasets_folder, args.dataset_name, "test")
 logging.info(f"Test set: {test_ds}")
 
-######################################### TEST on TEST SET #########################################
+######################################### TEST on Pitts30k #########################################
+recalls, recalls_str = test.test(args, test_ds, model, args.test_method, pca)
+logging.info(f"Recalls on {test_ds}: {recalls_str}")
+
+######################################### TEST on Tokyo247 #########################################
+args.dataset_name = "tokyo247"
+test_ds = datasets_ws.BaseDataset(args, args.datasets_folder, args.dataset_name, "test")
+logging.info(f"Test set: {test_ds}")
 recalls, recalls_str = test.test(args, test_ds, model, args.test_method, pca)
 logging.info(f"Recalls on {test_ds}: {recalls_str}")
 

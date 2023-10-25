@@ -53,7 +53,7 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
         output_negatives = output_negatives.contiguous().view(-1, L)
         loss = F.triplet_margin_loss(output_anchors, output_positives, output_negatives,
                                         margin=self.margin, p=2, reduction='mean')
-
+        #cself.margin**0.5
     elif (loss_type=='sare_joint'):
         # ### original version: euclidean distance
         dist_pos = ((output_anchors - output_positives)**2).sum(1)
@@ -126,7 +126,7 @@ torch.backends.cudnn.benchmark = True  # Provides a speedup
 #### Initial setup: parser, logging...
 args = parser.parse_arguments()
 start_time = datetime.now()
-args.save_dir = join("logs", args.save_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
+# args.save_dir = join("logs", args.save_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
 commons.setup_logging(args.save_dir)
 commons.make_deterministic(args.seed)
 logging.info(f"Arguments: {args}")
