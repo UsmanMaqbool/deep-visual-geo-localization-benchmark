@@ -3,7 +3,7 @@
 PYTHON=${PYTHON:-"python3"}
 DATE=$(date '+%d-%b') 
 LOSS=$1
-LR=0.00001
+LR=0.001
 ARCH=vgg16
 DATASET=pitts30k
 batchsize=1
@@ -17,7 +17,7 @@ fi
 FILES="/home/leo/usman_ws/models/graphvlad/benchmarking_vg/${DATASET}-${ARCH}-${LOSS}-lr${LR}-${DATE}"
 echo ${FILES}
 export DATASETS_FOLDER=datasets_vg/datasets
-# python3 train.py --dataset_name=${DATASET} --lr=${LR} --backbone=${ARCH} --criterion=${LOSS} --pretrain=offtheshelf --train_batch_size=${batchsize} --save_dir=${FILES}
+python3 train.py --dataset_name=${DATASET} --lr=${LR} --backbone=${ARCH} --criterion=${LOSS} --pretrain=offtheshelf --train_batch_size=${batchsize} --save_dir=${FILES}
 
 echo "==========Testing============="
 FILES="${FILES}/*.pth"

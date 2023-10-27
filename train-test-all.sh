@@ -2,7 +2,8 @@
 
 PYTHON=${PYTHON:-"python3"}
 
-FILES="/home/leo/usman_ws/models/graphvlad/benchmarking_vg/pitts30k-vgg16-triplet-lr0.0001-24-Oct/*.pth"
+FILES="/home/leo/usman_ws/models/graphvlad/benchmarking_vg/pitts30k-vgg16-triplet-lr0.001-26-Oct/*.pth"
+export DATASETS_FOLDER=datasets_vg/datasets
 
 echo "==========Testing============="
 echo "=============================="

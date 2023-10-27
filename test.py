@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Subset
+from pca import PCA
 
 
 def test_efficient_ram_usage(args, eval_ds, model, test_method="hard_resize"):
@@ -140,13 +141,14 @@ def test(args, eval_ds, model, test_method="hard_resize", pca=None):
             all_features = np.empty((5 * eval_ds.queries_num + eval_ds.database_num, args.features_dim), dtype="float32")
         else:
             all_features = np.empty((len(eval_ds), args.features_dim), dtype="float32")
-
+        if (pca is not None):
+            pca.load(gpu=args.device)
         for inputs, indices in tqdm(database_dataloader, ncols=100):
             features = model(inputs.to(args.device))
-            features = features.cpu().numpy()
+            # features = features.cpu().numpy()
             if pca is not None:
-                features = pca.transform(features)
-            all_features[indices.numpy(), :] = features
+                features = pca.infer(features)
+            all_features[indices.numpy(), :] = features.cpu()
         
         logging.debug("Extracting queries features for evaluation/testing")
         queries_infer_batch_size = 1 if test_method == "single_query" else args.infer_batch_size
@@ -160,9 +162,9 @@ def test(args, eval_ds, model, test_method="hard_resize", pca=None):
             features = model(inputs.to(args.device))
             if test_method == "five_crops":  # Compute mean along the 5 crops
                 features = torch.stack(torch.split(features, 5)).mean(1)
-            features = features.cpu().numpy()
+            # features = features.cpu().numpy()
             if pca is not None:
-                features = pca.transform(features)
+                features = pca.infer(features)
             
             if test_method == "nearest_crop" or test_method == 'maj_voting':  # store the features of all 5 crops
                 start_idx = eval_ds.database_num + (indices[0] - eval_ds.database_num) * 5

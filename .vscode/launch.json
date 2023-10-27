@@ -8,15 +8,17 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "train.py",
+            "program": "eval.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
                 "--dataset_name=pitts30k",
                 "--backbone=vgg16",
-                "--criterion=sare_joint",
+                "--aggregation=netvlad",
+                "--pca_dim=4096",
                 "--pretrain=offtheshelf",
-                "--save_dir=",
+                "--resume=/home/leo/usman_ws/models/graphvlad/benchmarking_vg/pitts30k-vgg16-triplet-lr0.001-26-Oct/triplet-0.pth",
+                "--pca_dataset_folder=pitts30k/images/train",
             ],
             "env": {
                 "DATASETS_FOLDER": "datasets_vg/datasets/" 
@@ -24,3 +26,29 @@
         }
     ]
 }
+// {
+//     // Use IntelliSense to learn about possible attributes.
+//     // Hover to view descriptions of existing attributes.
+//     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "name": "Python: Current File",
+//             "type": "python",
+//             "request": "launch",
+//             "program": "train.py",
+//             "console": "integratedTerminal",
+//             "justMyCode": true,
+//             "args": [
+//                 "--dataset_name=pitts30k",
+//                 "--backbone=vgg16",
+//                 "--criterion=sare_joint",
+//                 "--pretrain=offtheshelf",
+//                 "--save_dir=/home/leo/usman_ws/models/graphvlad/benchmarking_vg/pitts30k-vgg16-triplet-lr0.001-25-Oct",
+//             ],
+//             "env": {
+//                 "DATASETS_FOLDER": "datasets_vg/datasets/" 
+//             },
+//         }
+//     ]
+// }

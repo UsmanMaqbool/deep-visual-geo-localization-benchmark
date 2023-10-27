@@ -22,7 +22,7 @@ def parse_arguments():
     parser.add_argument("--lr", type=float, default=0.00001, help="_")
     parser.add_argument("--lr_crn_layer", type=float, default=5e-3, help="Learning rate for the CRN layer")
     parser.add_argument("--lr_crn_net", type=float, default=5e-4, help="Learning rate to finetune pretrained network when using CRN")
-    parser.add_argument("--optim", type=str, default="adam", help="_", choices=["adam", "sgd"])
+    parser.add_argument("--optim", type=str, default="sgd", help="_", choices=["adam", "sgd"])
     parser.add_argument("--cache_refresh_rate", type=int, default=1000,
                         help="How often to refresh cache, in number of queries")
     parser.add_argument("--queries_per_epoch", type=int, default=5000,
@@ -31,7 +31,7 @@ def parse_arguments():
                         help="How many negatives to consider per each query in the loss")
     parser.add_argument("--neg_samples_num", type=int, default=1000,
                         help="How many negatives to use to compute the hardest ones")
-    parser.add_argument("--mining", type=str, default="partial", choices=["partial", "full", "random", "msls_weighted"])
+    parser.add_argument("--mining", type=str, default="full", choices=["partial", "full", "random", "msls_weighted"])
     # Model parameters
     parser.add_argument("--backbone", type=str, default="resnet18conv4",
                         choices=["alexnet", "vgg16", "resnet18conv4", "resnet18conv5",
@@ -57,7 +57,7 @@ def parse_arguments():
                         help="Path to load checkpoint from, for resuming training or testing.")
     # Other parameters
     parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"])
-    parser.add_argument("--num_workers", type=int, default=8, help="num_workers for all dataloaders")
+    parser.add_argument("--num_workers", type=int, default=4, help="num_workers for all dataloaders")
     parser.add_argument('--resize', type=int, default=[480, 640], nargs=2, help="Resizing shape for images (HxW).")
     parser.add_argument('--test_method', type=str, default="hard_resize",
                         choices=["hard_resize", "single_query", "central_crop", "five_crops", "nearest_crop", "maj_voting"],

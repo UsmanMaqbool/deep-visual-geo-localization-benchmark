@@ -29,6 +29,11 @@ from datetime import datetime
 from torch.utils.model_zoo import load_url
 from google_drive_downloader import GoogleDriveDownloader as gdd
 
+from pca import PCA
+import numpy as np
+import random
+import os.path as osp
+
 import test
 import util
 import commons
@@ -96,7 +101,49 @@ if args.pca_dim is None:
 else:
     full_features_dim = args.features_dim
     args.features_dim = args.pca_dim
-    pca = util.compute_pca(args, model, args.pca_dataset_folder, full_features_dim)
+    
+    model = model.eval()
+    
+    
+    
+    pca_ds = datasets_ws.PCADataset(args, args.datasets_folder, args.pca_dataset_folder)
+    dl = torch.utils.data.DataLoader(pca_ds, args.infer_batch_size, shuffle=True)
+    
+    pca_parameters_path = osp.join('./logs', 'pca_params.h5')
+
+    
+    if (not osp.isfile(pca_parameters_path)):
+    
+        pca_features = np.empty([min(len(pca_ds), 2**14), full_features_dim])
+        with torch.no_grad():
+            for i, images in enumerate(dl):
+                if i*args.infer_batch_size >= len(pca_features):
+                    break
+                features = model(images).cpu().numpy()
+                pca_features[i*args.infer_batch_size : (i*args.infer_batch_size)+len(features)] = features
+        
+        
+        # pca = PCA(args.pca_dim)
+        # pca.fit(pca_features)
+        pca_features = torch.from_numpy(pca_features)
+
+        pca_features = list(pca_features)
+        if (len(pca_features)>10000):
+            pca_features = random.sample(pca_features, 10000)
+        
+        pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
+        pca_features = torch.stack(pca_features)
+        pca.train(pca_features)
+    else:
+        pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
+
+    
+    
+    
+    
+    
+
+    # pca = util.compute_pca(args, model, args.pca_dataset_folder, full_features_dim)
 
 ######################################### DATASETS #########################################
 test_ds = datasets_ws.BaseDataset(args, args.datasets_folder, args.dataset_name, "test")
