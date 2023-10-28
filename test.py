@@ -170,9 +170,9 @@ def test(args, eval_ds, model, test_method="hard_resize", pca=None):
                 start_idx = eval_ds.database_num + (indices[0] - eval_ds.database_num) * 5
                 end_idx = start_idx + indices.shape[0] * 5
                 indices = np.arange(start_idx, end_idx)
-                all_features[indices, :] = features
+                all_features[indices, :] = features.cpu()
             else:
-                all_features[indices.numpy(), :] = features
+                all_features[indices.numpy(), :] = features.cpu()
     
     queries_features = all_features[eval_ds.database_num:]
     database_features = all_features[:eval_ds.database_num]
