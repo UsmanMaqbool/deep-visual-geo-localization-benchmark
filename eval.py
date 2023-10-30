@@ -112,30 +112,29 @@ else:
     pca_parameters_path = osp.join('./logs', 'pca_params.h5')
 
     
-    if (not osp.isfile(pca_parameters_path)):
+    # if (not osp.isfile(pca_parameters_path)):
+        
+    pca_features = np.empty([min(len(pca_ds), 2**14), full_features_dim])
+    with torch.no_grad():
+        for i, images in enumerate(dl):
+            if i*args.infer_batch_size >= len(pca_features):
+                break
+            features = model(images).cpu().numpy()
+            pca_features[i*args.infer_batch_size : (i*args.infer_batch_size)+len(features)] = features
     
-        pca_features = np.empty([min(len(pca_ds), 2**14), full_features_dim])
-        with torch.no_grad():
-            for i, images in enumerate(dl):
-                if i*args.infer_batch_size >= len(pca_features):
-                    break
-                features = model(images).cpu().numpy()
-                pca_features[i*args.infer_batch_size : (i*args.infer_batch_size)+len(features)] = features
-        
-        
-        # pca = PCA(args.pca_dim)
-        # pca.fit(pca_features)
-        pca_features = torch.from_numpy(pca_features)
-
-        pca_features = list(pca_features)
-        if (len(pca_features)>10000):
-            pca_features = random.sample(pca_features, 10000)
-        
-        pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
-        pca_features = torch.stack(pca_features)
-        pca.train(pca_features)
-    else:
-        pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
+    
+    # pca = PCA(args.pca_dim)
+    # pca.fit(pca_features)
+    pca_features = torch.from_numpy(pca_features)
+    pca_features = list(pca_features)
+    if (len(pca_features)>10000):
+        pca_features = random.sample(pca_features, 10000)
+    
+    pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
+    pca_features = torch.stack(pca_features)
+    pca.train(pca_features)
+    # else:
+    #     pca = PCA(pca_n_components= args.features_dim, pca_whitening = True)
 
     
     
