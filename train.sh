@@ -3,7 +3,7 @@
 PYTHON=${PYTHON:-"python3"}
 DATE=$(date '+%d-%b') 
 LOSS=$1
-LR=0.0001
+LR=0.001
 ARCH=vgg16
 DATASET=pitts30k
 batchsize=1

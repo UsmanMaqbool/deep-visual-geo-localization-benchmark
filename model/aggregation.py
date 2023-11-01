@@ -87,7 +87,7 @@ class RRM(nn.Module):
 class NetVLAD(nn.Module):
     """NetVLAD layer implementation"""
 
-    def __init__(self, clusters_num=64, dim=512, normalize_input=True, work_with_tokens=False):
+    def __init__(self, clusters_num=64, dim=128, normalize_input=True, work_with_tokens=False):
         """
         Args:
             clusters_num : int
@@ -102,7 +102,6 @@ class NetVLAD(nn.Module):
         super().__init__()
         self.clusters_num = clusters_num
         self.dim = dim
-        self.alpha = 100
         self.normalize_input = normalize_input
         self.work_with_tokens = work_with_tokens
         if work_with_tokens:
@@ -157,37 +156,7 @@ class NetVLAD(nn.Module):
         with h5py.File(initcache, mode='r') as h5: 
             self.init_params(h5.get("centroids")[...], h5.get("descriptors")[...])
 
-            # pool_layer.clsts = h5.get("centroids")[...]
-            # pool_layer.traindescs = h5.get("descriptors")[...]
-            # pool_layer._init_params()
-        
-        
-        # descriptors_num = 50000
-        # descs_num_per_image = 100
-        # images_num = math.ceil(descriptors_num / descs_num_per_image)
-        # random_sampler = SubsetRandomSampler(np.random.choice(len(cluster_ds), images_num, replace=False))
-        # random_dl = DataLoader(dataset=cluster_ds, num_workers=args.num_workers,
-        #                         batch_size=args.infer_batch_size, sampler=random_sampler)
-        # with torch.no_grad():
-        #     backbone = backbone.eval()
-        #     logging.debug("Extracting features to initialize NetVLAD layer")
-        #     descriptors = np.zeros(shape=(descriptors_num, args.features_dim), dtype=np.float32)
-        #     for iteration, (inputs, _) in enumerate(tqdm(random_dl, ncols=100)):
-        #         inputs = inputs.to(args.device)
-        #         outputs = backbone(inputs)
-        #         norm_outputs = F.normalize(outputs, p=2, dim=1)
-        #         image_descriptors = norm_outputs.view(norm_outputs.shape[0], args.features_dim, -1).permute(0, 2, 1)
-        #         image_descriptors = image_descriptors.cpu().numpy()
-        #         batchix = iteration * args.infer_batch_size * descs_num_per_image
-        #         for ix in range(image_descriptors.shape[0]):
-        #             sample = np.random.choice(image_descriptors.shape[1], descs_num_per_image, replace=False)
-        #             startix = batchix + ix * descs_num_per_image
-        #             descriptors[startix:startix + descs_num_per_image, :] = image_descriptors[ix, sample, :]
-        # kmeans = faiss.Kmeans(args.features_dim, self.clusters_num, niter=100, verbose=False)
-        # kmeans.train(descriptors)
-        # logging.debug(f"NetVLAD centroids shape: {kmeans.centroids.shape}")
 
-        # self.init_params(h5.get("centroids")[...], h5.get("descriptors")[...])
         self = self.to(args.device)
 
 

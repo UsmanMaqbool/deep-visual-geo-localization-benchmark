@@ -56,32 +56,32 @@ def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
         #cself.margin**0.5
     elif (loss_type=='sare_joint'):
         # ### original version: euclidean distance
-        dist_pos = ((output_anchors - output_positives)**2).sum(1)
-        dist_pos = dist_pos.view(B, 1)
-
-        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        output_negatives = output_negatives.contiguous().view(-1, L)
-        dist_neg = ((output_anchors - output_negatives)**2).sum(1)
-        dist_neg = dist_neg.view(B, -1)
-
-        dist = - torch.cat((dist_pos, dist_neg), 1)
-        dist = F.log_softmax(dist, 1)
-        loss = (- dist[:, 0]).mean()
-
-        ## new version: dot product
-        # dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
-        # dist_pos = dist_pos.diagonal(0)
+        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
         # dist_pos = dist_pos.view(B, 1)
-        
+
         # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
         # output_negatives = output_negatives.contiguous().view(-1, L)
-        # dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
-        # dist_neg = dist_neg.diagonal(0)
+        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
         # dist_neg = dist_neg.view(B, -1)
-        
-        # dist = torch.cat((dist_pos, dist_neg), 1)/temp
+
+        # dist = - torch.cat((dist_pos, dist_neg), 1)
         # dist = F.log_softmax(dist, 1)
         # loss = (- dist[:, 0]).mean()
+
+        ## new version: dot product
+        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        dist_pos = dist_pos.diagonal(0)
+        dist_pos = dist_pos.view(B, 1)
+        
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        dist_neg = dist_neg.diagonal(0)
+        dist_neg = dist_neg.view(B, -1)
+        
+        dist = torch.cat((dist_pos, dist_neg), 1)/temp
+        dist = F.log_softmax(dist, 1)
+        loss = (- dist[:, 0]).mean()
 
     elif (loss_type=='sare_ind'):
         # ### original version: euclidean distance
