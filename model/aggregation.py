@@ -15,6 +15,14 @@ import model.functional as LF
 import model.normalization as normalization
 from os.path import join, exists, isfile, realpath, dirname
 
+# # graphsage
+import torch.nn.init as init
+
+# # Semantic Segmentation
+# 
+# # import espnet as net
+# from .espnet import *
+
 class MAC(nn.Module):
     def __init__(self):
         super().__init__()
@@ -244,3 +252,161 @@ class CRN(NetVLAD):
         vlad = F.normalize(vlad, p=2, dim=1)  # L2 normalize
         return vlad
 
+
+#### graphsage     
+class NeighborAggregator(nn.Module):
+    def __init__(self, input_dim, output_dim,
+                 use_bias=False, aggr_method="mean"):
+        """Aggregate node neighbors
+
+        Args:
+            input_dim: the dimension of the input feature
+            output_dim: the dimension of the output feature
+            use_bias: whether to use bias (default: {False})
+            aggr_method: neighbor aggregation method (default: {mean})
+        """
+        super(NeighborAggregator, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.use_bias = use_bias
+        self.aggr_method = aggr_method
+        self.weight = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        if self.use_bias:
+            self.bias = nn.Parameter(torch.Tensor(self.output_dim))
+        self.reset_parameters()
+    
+    def reset_parameters(self):
+        init.kaiming_uniform_(self.weight)
+        if self.use_bias:
+            init.zeros_(self.bias)
+
+    def forward(self, neighbor_feature):
+       # print(neighbor_feature.shape)
+        if self.aggr_method == "mean":
+            aggr_neighbor = neighbor_feature.mean(dim=1)
+        elif self.aggr_method == "sum":
+            aggr_neighbor = neighbor_feature.sum(dim=1)
+        elif self.aggr_method == "max":
+            aggr_neighbor = torch.amax(neighbor_feature, 1)
+        else:
+            raise ValueError("Unknown aggr type, expected sum, max, or mean, but got {}"
+                             .format(self.aggr_method))
+        # print(aggr_neighbor.shape,self.weight.shape)
+        neighbor_hidden = torch.matmul(aggr_neighbor, self.weight)
+        if self.use_bias:
+            neighbor_hidden += self.bias
+
+        return neighbor_hidden
+
+    def extra_repr(self):
+        return 'in_features={}, out_features={}, aggr_method={}'.format(
+            self.input_dim, self.output_dim, self.aggr_method)
+    
+#F.pre PReLU
+# prelu
+class SageGCN(nn.Module):
+    def __init__(self, input_dim, hidden_dim,
+                 activation=F.gelu,
+                 aggr_neighbor_method="sum",
+                 aggr_hidden_method="concat"):
+        """SageGCN layer definition
+        # firstworking with mean and concat
+        Args:
+            input_dim: the dimension of the input feature
+            hidden_dim: dimension of hidden layer features,
+                When aggr_hidden_method=sum, the output dimension is hidden_dim
+                When aggr_hidden_method=concat, the output dimension is hidden_dim*2
+            activation: activation function
+            aggr_neighbor_method: neighbor feature aggregation method, ["mean", "sum", "max"]
+            aggr_hidden_method: update method of node features, ["sum", "concat"]
+        """
+        super(SageGCN, self).__init__()
+        assert aggr_neighbor_method in ["mean", "sum", "max"]
+        assert aggr_hidden_method in ["sum", "concat"]
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.aggr_neighbor_method = aggr_neighbor_method
+        self.aggr_hidden_method = aggr_hidden_method
+        self.activation = activation
+        self.aggregator = NeighborAggregator(input_dim, hidden_dim,
+                                             aggr_method=aggr_neighbor_method)
+        self.weight = nn.Parameter(torch.Tensor(input_dim, hidden_dim))
+        self.reset_parameters()
+    
+    def reset_parameters(self):
+        init.kaiming_uniform_(self.weight)
+
+    def forward(self, src_node_features, neighbor_node_features):
+        neighbor_hidden = self.aggregator(neighbor_node_features)
+        
+        # print('src_node_features', neighbor_node_features.shape, src_node_features.shape, self.weight.shape)
+        self_hidden = torch.matmul(src_node_features, self.weight)
+        
+        if self.aggr_hidden_method == "sum":
+            hidden = self_hidden + neighbor_hidden
+        elif self.aggr_hidden_method == "concat":
+            hidden = torch.cat([self_hidden, neighbor_hidden], dim=1)
+        else:
+            raise ValueError("Expected sum or concat, got {}"
+                             .format(self.aggr_hidden))
+        if self.activation:
+            return self.activation(hidden)
+        else:
+            return hidden
+
+class GraphSage(nn.Module):
+    def __init__(self, input_dim, hidden_dim,
+                 num_neighbors_list):
+        super(GraphSage, self).__init__()
+        self.input_dim = input_dim #1433
+        self.hidden_dim = hidden_dim #[128, 7]
+        self.num_neighbors_list = num_neighbors_list #[10, 10]
+        self.num_layers = len(num_neighbors_list)  #2
+        self.gcn = nn.ModuleList()
+        self.gcn.append(SageGCN(input_dim, hidden_dim[0])) # (1433, 128)
+        for index in range(0, len(hidden_dim) - 2):
+            self.gcn.append(SageGCN(hidden_dim[index], hidden_dim[index+1])) #128, 7
+        self.gcn.append(SageGCN(hidden_dim[-2], hidden_dim[-1], activation=None))
+        
+
+
+    def forward(self, node_features_list):
+        hidden = node_features_list
+        # code.interact(local=locals())
+        subfeat_size = int(hidden[0].shape[1]/self.input_dim)
+        gcndim = int(self.input_dim) 
+        
+        # print('subfeat_size ', subfeat_size)
+        # print('  l  ', ' hop  ', '  src_node_features  ', '  neighbor_node_features  ', '  h  ', '    ')
+
+        for l in range(self.num_layers):
+            next_hidden = []
+            gcn = self.gcn[l]
+            for hop in range(self.num_layers - l):
+                src_node_features = hidden[hop]
+                src_node_num = len(src_node_features)
+                # print('neighbor_node_features ', hidden[hop + 1].shape  ,' / ',  src_node_num, self.num_neighbors_list[hop], '-1')
+                neighbor_node_features = hidden[hop + 1] \
+                    .view((src_node_num, self.num_neighbors_list[hop], -1))
+                # print(l,' ', hop  ,'  ',  src_node_features.shape  ,'  ' , neighbor_node_features.shape)
+                
+                # splitting the i/p
+                #h = gcn(src_node_features, neighbor_node_features)
+                for j in range(subfeat_size): 
+                    h_x = gcn(src_node_features[:,j*gcndim:j*gcndim+gcndim], neighbor_node_features[:,:,j*gcndim:j*gcndim+gcndim])
+                    # neighborsFeat = []
+                    if (j==0):
+                        h = h_x;
+                    else:
+                        h = torch.concat([h, h_x],1) 
+                        
+                # print("hop", hop,'  ',  h.shape)
+                next_hidden.append(h)
+            hidden = next_hidden
+        # print("hidden", ' ',  hidden[0].shape)    
+        return hidden[0]
+
+    def extra_repr(self):
+        return 'in_features={}, num_neighbors_list={}'.format(
+            self.input_dim, self.num_neighbors_list
+        )

@@ -18,109 +18,7 @@ import commons
 import datasets_ws
 from model import network
 from model.sync_batchnorm import convert_model
-from model.functional import sare_ind, sare_joint
-
-def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
-    
-    # if B*N!=vlad_encoding.shape[0]:
-        # vlad_encoding = vlad_encoding[:B*N,:]
-    # print("vlad_encoding: " , vlad_encoding.shape)
-
-    # outputs = vlad_encoding.view(B, N, -1)
-    # print("outputs: " , outputs.shape)
-
-    #N: 12
-    # B: 1
-    # nNeg: 10
-
-    temp = 0.07
-    
-
-    # outputs = outputs.view(B, N, -1)
-
-    outputs = vlad_encoding.view(B, N, -1)
-    L = vlad_encoding.size(-1)
-
-    output_negatives = outputs[:, 2:]
-    output_anchors = outputs[:, 0]
-    output_positives = outputs[:, 1]
-
-    # output_anchors, output_positives, output_negatives = torch.split(vlad_encoding, [B, B, nNeg])
-    
-    if (loss_type=='triplet'):
-        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        output_positives = output_positives.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        output_negatives = output_negatives.contiguous().view(-1, L)
-        loss = F.triplet_margin_loss(output_anchors, output_positives, output_negatives,
-                                        margin=self.margin, p=2, reduction='mean')
-        #cself.margin**0.5
-    elif (loss_type=='sare_joint'):
-        # ### original version: euclidean distance
-        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
-        # dist_pos = dist_pos.view(B, 1)
-
-        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        # output_negatives = output_negatives.contiguous().view(-1, L)
-        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
-        # dist_neg = dist_neg.view(B, -1)
-
-        # dist = - torch.cat((dist_pos, dist_neg), 1)
-        # dist = F.log_softmax(dist, 1)
-        # loss = (- dist[:, 0]).mean()
-
-        ## new version: dot product
-        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
-        dist_pos = dist_pos.diagonal(0)
-        dist_pos = dist_pos.view(B, 1)
-        
-        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        output_negatives = output_negatives.contiguous().view(-1, L)
-        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
-        dist_neg = dist_neg.diagonal(0)
-        dist_neg = dist_neg.view(B, -1)
-        
-        dist = torch.cat((dist_pos, dist_neg), 1)/temp
-        dist = F.log_softmax(dist, 1)
-        loss = (- dist[:, 0]).mean()
-
-    elif (loss_type=='sare_ind'):
-        # ### original version: euclidean distance
-        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
-        # dist_pos = dist_pos.view(B, 1)
-
-        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        # output_negatives = output_negatives.contiguous().view(-1, L)
-        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
-        # dist_neg = dist_neg.view(B, -1)
-
-        # dist_neg = dist_neg.unsqueeze(2)
-        # dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
-        # dist = - torch.cat((dist_pos, dist_neg), 2).view(-1, 2)
-        # dist = F.log_softmax(dist, 1)
-        # loss = (- dist[:, 0]).mean()
-
-        ## new version: dot product
-        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
-        dist_pos = dist_pos.diagonal(0)
-        dist_pos = dist_pos.view(B, 1)
-        
-        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
-        output_negatives = output_negatives.contiguous().view(-1, L)
-        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
-        dist_neg = dist_neg.diagonal(0)
-        dist_neg = dist_neg.view(B, -1)
-        
-        dist_neg = dist_neg.unsqueeze(2)
-        dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
-        dist = torch.cat((dist_pos, dist_neg), 2).view(-1, 2)/temp
-        dist = F.log_softmax(dist, 1)
-        loss = (- dist[:, 0]).mean()
-
-    else:
-        assert ("Unknown loss function")
-
-    return loss   
-
+from model.functional import get_loss
 
 torch.backends.cudnn.benchmark = True  # Provides a speedup
 #### Initial setup: parser, logging...
@@ -146,14 +44,16 @@ test_ds = datasets_ws.BaseDataset(args, args.datasets_folder, args.dataset_name,
 logging.info(f"Test set: {test_ds}")
 
 #### Initialize model
-model = network.GeoLocalizationNet(args)
+# model = network.GeoLocalizationNet(args)
+model = network.GraphVLAD(args)
+
 model = model.to(args.device)
 if args.aggregation in ["netvlad", "crn"]:  # If using NetVLAD layer, initialize it
     if not args.resume:
         triplets_ds.is_inference = True
         model.aggregation.initialize_netvlad_layer(args, triplets_ds, model.backbone)
     args.features_dim *= args.netvlad_clusters
-
+model.Espnet.initialize_encoder(args, "/home/leo/usman_ws/datasets/espnet-encoder/espnet_p_2_q_8.pth")    
 model = torch.nn.DataParallel(model)
 
 #### Setup Optimizer and Loss
@@ -187,10 +87,10 @@ if args.resume:
 else:
     best_r5 = start_epoch_num = not_improved_num = 0
 
-if args.backbone.startswith('vit'):
-    logging.info(f"Output dimension of the model is {args.features_dim}")
-else:
-    logging.info(f"Output dimension of the model is {args.features_dim}, with {util.get_flops(model, args.resize)}")
+# if args.backbone.startswith('vit'):
+#     logging.info(f"Output dimension of the model is {args.features_dim}")
+# else:
+#     logging.info(f"Output dimension of the model is {args.features_dim}, with {util.get_flops(model, args.resize)}")
 
 
 if torch.cuda.device_count() >= 2:

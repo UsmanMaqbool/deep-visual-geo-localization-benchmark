@@ -3,28 +3,106 @@ import math
 import torch
 import torch.nn.functional as F
 
-def sare_ind(query, positive, negative):
-    '''all 3 inputs are supposed to be shape 1xn_features'''
-    dist_pos = ((query - positive)**2).sum(1)
-    dist_neg = ((query - negative)**2).sum(1)
+def get_loss(self, vlad_encoding, loss_type, B, N, nNeg):
     
-    dist = - torch.cat((dist_pos, dist_neg))
-    dist = F.log_softmax(dist, 0)
-    
-    #loss = (- dist[:, 0]).mean() on a batch
-    loss = -dist[0]
-    return loss
+    # if B*N!=vlad_encoding.shape[0]:
+        # vlad_encoding = vlad_encoding[:B*N,:]
+    # print("vlad_encoding: " , vlad_encoding.shape)
 
-def sare_joint(query, positive, negatives):
-    '''query and positive have to be 1xn_features; whereas negatives has to be
-    shape n_negative x n_features. n_negative is usually 10'''
-    # NOTE: the implementation is the same if batch_size=1 as all operations
-    # are vectorial. If there were the additional n_batch dimension a different
-    # handling of that situation would have to be implemented here.
-    # This function is declared anyway for the sake of clarity as the 2 should
-    # be called in different situations because, even though there would be
-    # no Exceptions, there would actually be a conceptual error.
-    return sare_ind(query, positive, negatives)
+    # outputs = vlad_encoding.view(B, N, -1)
+    # print("outputs: " , outputs.shape)
+
+    #N: 12
+    # B: 1
+    # nNeg: 10
+
+    temp = 0.07
+    
+
+    # outputs = outputs.view(B, N, -1)
+
+    outputs = vlad_encoding.view(B, N, -1)
+    L = vlad_encoding.size(-1)
+
+    output_negatives = outputs[:, 2:]
+    output_anchors = outputs[:, 0]
+    output_positives = outputs[:, 1]
+
+    # output_anchors, output_positives, output_negatives = torch.split(vlad_encoding, [B, B, nNeg])
+    
+    if (loss_type=='triplet'):
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_positives = output_positives.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        loss = F.triplet_margin_loss(output_anchors, output_positives, output_negatives,
+                                        margin=self.margin, p=2, reduction='mean')
+        #cself.margin**0.5
+    elif (loss_type=='sare_joint'):
+        # ### original version: euclidean distance
+        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
+        # dist_pos = dist_pos.view(B, 1)
+
+        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        # output_negatives = output_negatives.contiguous().view(-1, L)
+        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
+        # dist_neg = dist_neg.view(B, -1)
+
+        # dist = - torch.cat((dist_pos, dist_neg), 1)
+        # dist = F.log_softmax(dist, 1)
+        # loss = (- dist[:, 0]).mean()
+
+        ## new version: dot product
+        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        dist_pos = dist_pos.diagonal(0)
+        dist_pos = dist_pos.view(B, 1)
+        
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        dist_neg = dist_neg.diagonal(0)
+        dist_neg = dist_neg.view(B, -1)
+        
+        dist = torch.cat((dist_pos, dist_neg), 1)/temp
+        dist = F.log_softmax(dist, 1)
+        loss = (- dist[:, 0]).mean()
+
+    elif (loss_type=='sare_ind'):
+        # ### original version: euclidean distance
+        # dist_pos = ((output_anchors - output_positives)**2).sum(1)
+        # dist_pos = dist_pos.view(B, 1)
+
+        # output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        # output_negatives = output_negatives.contiguous().view(-1, L)
+        # dist_neg = ((output_anchors - output_negatives)**2).sum(1)
+        # dist_neg = dist_neg.view(B, -1)
+
+        # dist_neg = dist_neg.unsqueeze(2)
+        # dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
+        # dist = - torch.cat((dist_pos, dist_neg), 2).view(-1, 2)
+        # dist = F.log_softmax(dist, 1)
+        # loss = (- dist[:, 0]).mean()
+
+        ## new version: dot product
+        dist_pos = torch.mm(output_anchors, output_positives.transpose(0,1)) # B*B
+        dist_pos = dist_pos.diagonal(0)
+        dist_pos = dist_pos.view(B, 1)
+        
+        output_anchors = output_anchors.unsqueeze(1).expand_as(output_negatives).contiguous().view(-1, L)
+        output_negatives = output_negatives.contiguous().view(-1, L)
+        dist_neg = torch.mm(output_anchors, output_negatives.transpose(0,1)) # B*B
+        dist_neg = dist_neg.diagonal(0)
+        dist_neg = dist_neg.view(B, -1)
+        
+        dist_neg = dist_neg.unsqueeze(2)
+        dist_pos = dist_pos.view(B, 1, 1).expand_as(dist_neg)
+        dist = torch.cat((dist_pos, dist_neg), 2).view(-1, 2)/temp
+        dist = F.log_softmax(dist, 1)
+        loss = (- dist[:, 0]).mean()
+
+    else:
+        assert ("Unknown loss function")
+
+    return loss   
 
 def mac(x):
     return F.adaptive_max_pool2d(x, (1,1))
