@@ -43,36 +43,7 @@ from model import network
 OFF_THE_SHELF_RADENOVIC = {
     'resnet50conv5_sfm'    : 'http://cmp.felk.cvut.cz/cnnimageretrieval/data/networks/retrieval-SfM-120k/rSfM120k-tl-resnet50-gem-w-97bf910.pth',
     'resnet101conv5_sfm'   : 'http://cmp.felk.cvut.cz/cnnimageretrieval/data/networks/retrieval-SfM-120k/rSfM120k-tl-resnet101-gem-w-a155e54.pth',
-    'resnet50conv5_gldv1'  : 'http://cmp.felk.cvut.cz/cnnimageretrieval/data/networks/gl18/gl18-tl-resnet50-gem-w-83fdc30.pth',
-    'resnet101conv5_gldv1' : 'http://cmp.felk.cvut.cz/cnnimageretrieval/data/networks/gl18/gl18-tl-resnet101-gem-w-a4d43db.pth',
-}
-
-OFF_THE_SHELF_NAVER = {
-    "resnet50conv5"  : "1oPtE_go9tnsiDLkWjN4NMpKjh-_md1G5",
-    'resnet101conv5' : "1UWJGDuHtzaQdFhSMojoYVQjmCXhIwVvy"
-}
-
-######################################### SETUP #########################################
-args = parser.parse_arguments()
-start_time = datetime.now()
-args.save_dir = join("test", args.save_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
-commons.setup_logging(args.save_dir)
-commons.make_deterministic(args.seed)
-logging.info(f"Arguments: {args}")
-logging.info(f"The outputs are being saved in {args.save_dir}")
-
-######################################### MODEL #########################################
-model = network.GeoLocalizationNet(args)
-model = model.to(args.device)
-
-if args.aggregation in ["netvlad", "crn"]:
-    args.features_dim *= args.netvlad_clusters
-
-if args.off_the_shelf.startswith("radenovic") or args.off_the_shelf.startswith("naver"):
-    if args.off_the_shelf.startswith("radenovic"):
-        pretrain_dataset_name = args.off_the_shelf.split("_")[1]  # sfm or gldv1 datasets
-        url = OFF_THE_SHELF_RADENOVIC[f"{args.backbone}_{pretrain_dataset_name}"]
-        state_dict = load_url(url, model_dir=join("data", "off_the_shelf_nets"))
+    'resnet50conv5_gldv1https://www.webmd.com/drugs/2https://www.webmd.com/drugs/2/drug-14396-396/tobramycin-ophthalmic-eye/tobramycin-ophthalmic-drops/detailsb1 b2 ", "off_the_shelf_nets"))
     else:
         # This is a hacky workaround to maintain compatibility
         sys.modules['sklearn.decomposition.pca'] = sklearn.decomposition._pca
@@ -160,3 +131,4 @@ recalls, recalls_str = test.test(args, test_ds, model, args.test_method, pca)
 logging.info(f"Recalls on {test_ds}: {recalls_str}")
 
 logging.info(f"Finished in {str(datetime.now() - start_time)[:-7]}")
+https://www.webmd.com/drugs/2/drug-14396-396/tobramycin-ophthalmic-eye/tobramycin-ophthalmic-drops/detailsb1 b2 https://www.webmd.com/drugs/2/drug-14396-396/tobramycin-ophthalmic-eye/tobramycin-ophthalmic-drops/detailsb1 b2 

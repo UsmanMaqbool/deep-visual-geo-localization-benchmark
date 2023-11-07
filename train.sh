@@ -20,16 +20,16 @@ echo ${FILES}
 export DATASETS_FOLDER=datasets_vg/datasets
 python3 train.py --dataset_name=${DATASET} --lr=${LR} --backbone=${ARCH} --criterion=${LOSS} --pretrain=offtheshelf --train_batch_size=${batchsize} --save_dir=${FILES} --aggregation=${aggregation}
 
-# echo "==========Testing============="
-# FILES="${FILES}/*.pth"
-# echo ${FILES}
+echo "==========Testing============="
+FILES="${FILES}/*.pth"
+echo ${FILES}
 
-# for RESUME in $FILES
-# do
-#   echo "Processing $RESUME ..."
-#   # take action on each file. $f store current file name
-#   python3 eval.py --dataset_name=${DATASET} --backbone=vgg16 --aggregation=aggregation --pca_dim=4096 --resume=$RESUME  --pca_dataset_folder=pitts30k/images/train
-#   echo "============Done================"
+for RESUME in $FILES
+do
+  echo "Processing $RESUME ..."
+  # take action on each file. $f store current file name
+  python3 eval.py --dataset_name=${DATASET} --backbone=vgg16 --aggregation=${aggregation} --pca_dim=4096 --resume=$RESUME  --pca_dataset_folder=pitts30k/images/train
+  echo "============Done================"
   
-# done
+done
 
